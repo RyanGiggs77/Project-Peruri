@@ -8,7 +8,7 @@ Aplikasi manajemen inventaris barang yang dilengkapi sistem login (JWT), manajem
 
 | Bagian | Teknologi |
 |--------|-----------|
-| Backend | Node.js, Express.js, PostgreSQL (`pg`), JSON Web Token (`jsonwebtoken`), `bcrypt`, `dotenv`, `cors` |
+| Backend | Node.js, Express.js, PostgreSQL (`pg`), JSON Web Token (`jsonwebtoken`), `bcrypt`, `dotenv`, `cors`, `multer` (upload file), `exceljs` (import/export Excel) |
 | Frontend | React, Vite, Tailwind CSS v4, `axios`, `react-router-dom`, `recharts` |
 
 ---
@@ -100,8 +100,23 @@ curl -X POST http://localhost:5000/api/auth/register \
 Atau daftar langsung lewat halaman **Register** di aplikasi (role otomatis `user`).
 
 ### Perbedaan Hak Akses
-- **Admin** : bisa melihat, menambah, mengubah, dan menghapus data (merk, lokasi, barang, peminjaman).
+- **Admin** : bisa melihat, menambah, mengubah, dan menghapus data (merk, lokasi, barang, peminjaman) serta import/export Excel.
 - **User** : hanya bisa melihat/membaca data, semua tombol aksi disembunyikan.
+
+---
+
+## Import & Export Excel
+
+Halaman **Merk**, **Lokasi**, dan **Barang** dilengkapi fitur import dan export data ke file Excel (`.xlsx`):
+
+- **Export Excel** : mengunduh seluruh data menjadi file `merk.xlsx`, `lokasi.xlsx`, atau `barang.xlsx`.
+- **Import Excel** : mengunggah file `.xlsx` untuk menambahkan data secara massal (khusus admin). Baris pertama file harus berupa header kolom, contoh untuk barang:
+
+| Kode Barang | Nama Barang | Merk | Tipe | Serial Number | Tahun Pembelian | Status | Lokasi | Pengguna | Keterangan |
+|-------------|-------------|------|------|---------------|-----------------|--------|--------|----------|------------|
+|             | Laptop Asus | Asus | X510UA | 123456789 | 2024 | aktif | Gudang IT | Budi | Unit baru |
+
+> Catatan: kolom **Kode Barang** diisi otomatis oleh sistem, bisa dikosongkan pada file import. Barang yang gagal diimport (data tidak valid, merk/lokasi belum terdaftar, atau serial number duplikat) akan dilaporkan beserta alasan per baris.
 
 ---
 

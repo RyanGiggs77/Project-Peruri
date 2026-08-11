@@ -5,6 +5,7 @@ import Modal from '../components/Modal'
 import Alert from '../components/Alert'
 import Breadcrumb from '../components/Breadcrumb'
 import ConfirmDialog from '../components/ConfirmDialog'
+import ImportExportButtons from '../components/ImportExportButtons'
 import { Input, Textarea } from '../components/form'
 import { isAdmin } from '../auth'
 
@@ -100,21 +101,30 @@ export default function Merk() {
     <Layout>
       <div className="max-w-7xl mx-auto">
         <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Merk' }]} />
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h2 className="text-lg font-semibold text-slate-800">Master Merk</h2>
-          {isAdmin() && (
-            <button
-              onClick={openAdd}
-              className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
-            >
-              + Tambah Merk
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ImportExportButtons
+              base="/merk"
+              filename="merk"
+              onImported={fetchMerk}
+              onSuccess={(m) => setSuccess(m)}
+              onError={(m) => setError(m)}
+            />
+            {isAdmin() && (
+              <button
+                onClick={openAdd}
+                className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
+              >
+                + Tambah Merk
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
-          {/* <Alert type="error" message={error} /> */}
+          <Alert type="error" message={error} />
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

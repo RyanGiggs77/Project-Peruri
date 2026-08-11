@@ -5,6 +5,7 @@ import Modal from '../components/Modal'
 import Alert from '../components/Alert'
 import Breadcrumb from '../components/Breadcrumb'
 import ConfirmDialog from '../components/ConfirmDialog'
+import ImportExportButtons from '../components/ImportExportButtons'
 import { Input } from '../components/form'
 import { isAdmin } from '../auth'
 
@@ -100,16 +101,25 @@ export default function Lokasi() {
     <Layout>
       <div className="max-w-7xl mx-auto">
         <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Lokasi' }]} />
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
           <h2 className="text-lg font-semibold text-slate-800">Master Lokasi</h2>
-          {isAdmin() && (
-            <button
-              onClick={openAdd}
-              className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
-            >
-              + Tambah Lokasi
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            <ImportExportButtons
+              base="/lokasi"
+              filename="lokasi"
+              onImported={fetchLokasi}
+              onSuccess={(m) => setSuccess(m)}
+              onError={(m) => setError(m)}
+            />
+            {isAdmin() && (
+              <button
+                onClick={openAdd}
+                className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
+              >
+                + Tambah Lokasi
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="mb-4 space-y-3">
