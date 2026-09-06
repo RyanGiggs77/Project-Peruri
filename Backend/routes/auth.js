@@ -5,23 +5,18 @@ const { signToken, authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
-const VALID_ROLES = ['admin', 'user'];
-
 router.post('/register', async (req, res) => {
-  const { name, password, role = 'user' } = req.body;
+  const { name, password } = req.body;
 
   if (!name || !password) {
     return res.status(400).json({ message: 'Name dan password wajib diisi' });
   }
 
-  if (!VALID_ROLES.includes(role)) {
-    return res.status(400).json({ message: 'Role harus "admin" atau "user"' });
-  }
-
   try {
-    const roleRes = await db.query('SELECT id FROM roles WHERE name = $1', [role]);
+    // Role selalu 'user' — pembuatan akun admin hanya lewat DB (seed/manual)
+    const roleRes = await db.query("SELECT id FROM roles WHERE name = 'user'");
     if (roleRes.rows.length === 0) {
-      return res.status(400).json({ message: 'Role tidak valid' });
+      return res.status(500).json({ message: 'Role user tidak ditemukan' });
     }
 
     const existing = await db.query('SELECT id FROM users WHERE name = $1', [name]);
@@ -35,7 +30,7 @@ router.post('/register', async (req, res) => {
       [name, hashedPassword, roleRes.rows[0].id]
     );
 
-    const user = { ...result.rows[0], role };
+    const user = { ...result.rows[0], role: 'user' };
     const token = signToken(user);
 
     res.status(201).json({ message: 'Registrasi berhasil', user, token });

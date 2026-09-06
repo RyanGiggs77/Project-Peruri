@@ -26,6 +26,14 @@ const loginLimiter = rateLimit({
   message: { message: 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.' },
 });
 
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { message: 'Terlalu banyak percobaan registrasi. Coba lagi dalam 1 jam.' },
+});
+
 const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
   max: 300,
@@ -39,6 +47,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api/auth/login', loginLimiter);
+app.use('/api/auth/register', registerLimiter);
 app.use('/api', apiLimiter);
 
 app.use('/api/auth', authRoutes);
