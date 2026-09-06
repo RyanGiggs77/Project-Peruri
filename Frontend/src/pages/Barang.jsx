@@ -330,22 +330,27 @@ export default function Barang() {
               )}
             </div>
           </div>
-          {isAdmin() && view === 'aktif' && (
+          {isAdmin() && view === 'trash' && <div />}
+          {view === 'aktif' && (
             <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importMutation.isPending}
-                className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
-              >
-                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
-              </button>
+              {isAdmin() && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".xlsx"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={importMutation.isPending}
+                    className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
+                  >
+                    {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
+                  </button>
+                </>
+              )}
               <button
                 onClick={handleExport}
                 disabled={exporting}
@@ -353,12 +358,14 @@ export default function Barang() {
               >
                 {exporting ? 'Mengekspor...' : 'Export Excel'}
               </button>
-              <button
-                onClick={openAdd}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
-              >
-                + Tambah Barang
-              </button>
+              {isAdmin() && (
+                <button
+                  onClick={openAdd}
+                  className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
+                >
+                  + Tambah Barang
+                </button>
+              )}
             </div>
           )}
         </div>

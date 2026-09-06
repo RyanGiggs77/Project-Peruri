@@ -257,21 +257,25 @@ export default function Peminjaman() {
               >
                 {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
               </button>
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
-              >
-                {exporting ? 'Mengekspor...' : 'Export Excel'}
-              </button>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
+            >
+              {exporting ? 'Mengekspor...' : 'Export Excel'}
+            </button>
+            {isAdmin() && (
               <button
                 onClick={openAdd}
                 className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
               >
                 + Tambah Peminjaman
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="mb-4 space-y-3">
