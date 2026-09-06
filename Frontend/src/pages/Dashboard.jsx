@@ -107,7 +107,7 @@ export default function Dashboard() {
           {loading ? (
             <p className="text-sm text-slate-500">Memuat statistik...</p>
           ) : !error && (
-            <div className="grid grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
               {statCards.map((s) => (
                 <StatCard key={s.label} label={s.label} value={s.value} color={s.color} icon={s.icon} />
               ))}

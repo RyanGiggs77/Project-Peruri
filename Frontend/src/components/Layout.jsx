@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { getUser, clearSession } from '../auth'
 
 const links = [
@@ -10,18 +10,42 @@ const links = [
   { to: '/peminjaman', label: 'Peminjaman', icon: '🔁' },
 ]
 
+function useIsDesktop() {
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth >= 768
+  )
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)')
+    const onChange = (e) => setIsDesktop(e.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return isDesktop
+}
+
 export default function Layout({ children }) {
   const navigate = useNavigate()
+  const location = useLocation()
+  const isDesktop = useIsDesktop()
   const user = getUser()
-  const [sidebarOpen, setSidebarOpen] = useState(() => {
-    const saved = localStorage.getItem('sidebarOpen')
-    return saved === null ? true : saved === 'true'
-  })
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  // Sidebar terbuka hanya jika state tersimpan true DAN layar desktop;
+  // di mobile selalu mulai tertutup (mode overlay).
+  const [sidebarOpen, setSidebarOpen] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.innerWidth >= 768 &&
+      localStorage.getItem('sidebarOpen') !== 'false'
+  )
 
   useEffect(() => {
     localStorage.setItem('sidebarOpen', String(sidebarOpen))
   }, [sidebarOpen])
+
+  // Tutup overlay sidebar saat pindah halaman di mobile
+  useEffect(() => {
+    if (!isDesktop) setSidebarOpen(false)
+  }, [location.pathname, isDesktop])
 
   function handleLogout() {
     clearSession()
@@ -107,6 +131,14 @@ export default function Layout({ children }) {
       </header>
 
       <div className="flex pt-16 min-h-screen">
+        {/* Backdrop overlay: hanya tampil saat sidebar terbuka di mobile */}
+        {sidebarOpen && !isDesktop && (
+          <div
+            className="fixed inset-0 top-16 bg-slate-900/50 z-20 md:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         <aside
           className={`fixed top-16 bottom-0 left-0 w-64 bg-slate-900 text-slate-200 flex flex-col z-30 transition-all duration-300 ease-in-out ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -137,8 +169,8 @@ export default function Layout({ children }) {
         </aside>
 
         <main
-          className={`flex-1 min-w-0 px-6 py-8 transition-all duration-300 ease-in-out ${
-            sidebarOpen ? 'ml-64' : 'ml-0'
+          className={`flex-1 min-w-0 px-4 sm:px-6 py-6 sm:py-8 transition-all duration-300 ease-in-out ${
+            sidebarOpen ? 'md:ml-64' : 'ml-0'
           }`}
         >
           {children}
