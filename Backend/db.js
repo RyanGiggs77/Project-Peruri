@@ -6,6 +6,9 @@ const pool = new Pool({
   user: process.env.PGUSER,
   password: process.env.PGPASSWORD,
   database: process.env.PGDATABASE,
+  // Neon / provider Postgres cloud mewajibkan SSL.
+  // Set PGSSL=require di environment produksi; lokal tidak perlu.
+  ssl: process.env.PGSSL === 'require' ? { rejectUnauthorized: false } : false,
 });
 
 // Kirim tipe DATE (OID 1082) apa adanya sebagai string 'YYYY-MM-DD'

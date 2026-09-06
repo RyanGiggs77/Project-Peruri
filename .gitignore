@@ -1,0 +1,13 @@
+# Environment files (jangan pernah commit secrets)
+.env
+.env_copy
+*.env
+
+# Database dump / file import
+data.sql
+data-clean.sql
+neon-import.sql
+
+# OS
+.DS_Store
+Thumbs.db
