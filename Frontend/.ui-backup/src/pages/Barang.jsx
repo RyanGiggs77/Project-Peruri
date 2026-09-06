@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -49,19 +49,13 @@ export default function Barang() {
   const [restoreTarget, setRestoreTarget] = useState(null)
   const [permanentTarget, setPermanentTarget] = useState(null)
   const [deleting, setDeleting] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
-  const fileInputRef = useRef(null)
 
   const [search, setSearch] = useState('')
-  const [searchInput, setSearchInput] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterMerk, setFilterMerk] = useState('')
   const [filterLokasi, setFilterLokasi] = useState('')
   const [sortTahun, setSortTahun] = useState('')
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
 
   useEffect(() => {
     fetchAll()
@@ -69,10 +63,12 @@ export default function Barang() {
 
   async function fetchAll() {
     try {
-      const [merkRes, lokasiRes] = await Promise.all([
+      const [barangRes, merkRes, lokasiRes] = await Promise.all([
+        api.get('/barang'),
         api.get('/merk'),
         api.get('/lokasi'),
       ])
+      setBarangList(barangRes.data.barang)
       setMerkList(merkRes.data.merk)
       setLokasiList(lokasiRes.data.lokasi)
     } catch (err) {
@@ -82,47 +78,56 @@ export default function Barang() {
     }
   }
 
-  const fetchBarang = useCallback(async () => {
+  async function fetchBarang() {
     try {
-      const endpoint = view === 'trash' ? '/barang/trash' : '/barang'
-      const params = {}
-      if (search) params.search = search
-      if (filterStatus) params.status = filterStatus
-      if (filterMerk) params.merk = filterMerk
-      if (filterLokasi) params.lokasi = filterLokasi
-      if (sortTahun) params.sort = sortTahun
-      params.page = page
-      params.limit = PAGE_SIZE
-
-      const res = await api.get(endpoint, { params })
+      const res = await api.get(view === 'trash' ? '/barang/trash' : '/barang')
       setBarangList(res.data.barang)
-      setTotal(res.data.total)
     } catch (err) {
       setError(err.response?.data?.message || 'Gagal memuat data barang')
     }
-  }, [view, search, filterStatus, filterMerk, filterLokasi, sortTahun, page])
-
-  useEffect(() => {
-    fetchBarang()
-  }, [fetchBarang])
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setPage(1)
-      setSearch(searchInput)
-    }, 400)
-    return () => clearTimeout(t)
-  }, [searchInput])
+  }
 
   async function switchView(next) {
     setView(next)
     setPage(1)
     setError('')
     setSuccess('')
+    setLoading(true)
+    try {
+      const res = await api.get(next === 'trash' ? '/barang/trash' : '/barang')
+      setBarangList(res.data.barang)
+    } catch (err) {
+      setError(err.response?.data?.message || 'Gagal memuat data barang')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
-  const pageItems = barangList
+  const filtered = useMemo(() => {
+    let items = barangList.filter((b) => {
+      const matchSearch =
+        !search || b.nama_barang.toLowerCase().includes(search.toLowerCase())
+      const matchStatus = !filterStatus || b.status === filterStatus
+      const matchMerk = !filterMerk || b.merk === filterMerk
+      const matchLokasi = !filterLokasi || b.lokasi === filterLokasi
+      return matchSearch && matchStatus && matchMerk && matchLokasi
+    })
+
+    if (sortTahun === 'asc') {
+      items = [...items].sort(
+        (a, b) => (a.tahun_pembelian ?? 0) - (b.tahun_pembelian ?? 0)
+      )
+    } else if (sortTahun === 'desc') {
+      items = [...items].sort(
+        (a, b) => (b.tahun_pembelian ?? 0) - (a.tahun_pembelian ?? 0)
+      )
+    }
+
+    return items
+  }, [barangList, search, filterStatus, filterMerk, filterLokasi, sortTahun])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   function resetToFirstPage() {
     setPage(1)
@@ -222,54 +227,6 @@ export default function Barang() {
     }
   }
 
-  async function handleExport() {
-    setError('')
-    setExporting(true)
-    try {
-      const res = await api.get('/barang/export', { responseType: 'blob' })
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `data-barang-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      setSuccess('Data barang berhasil diekspor')
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal mengekspor data barang')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  function handleFileChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setError('')
-    setSuccess('')
-    setImporting(true)
-    const formData = new FormData()
-    formData.append('file', file)
-
-    api
-      .post('/barang/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchBarang()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
-  }
-
   async function handleRestore() {
     if (!restoreTarget) return
     setError('')
@@ -341,59 +298,18 @@ export default function Barang() {
             </div>
           </div>
           {isAdmin() && view === 'aktif' && (
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
-              >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
-              </button>
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
-              >
-                {exporting ? 'Mengekspor...' : 'Export Excel'}
-              </button>
-              <button
-                onClick={openAdd}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
-              >
-                + Tambah Barang
-              </button>
-            </div>
+            <button
+              onClick={openAdd}
+              className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
+            >
+              + Tambah Barang
+            </button>
           )}
         </div>
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
           <Alert type="error" message={error} />
-          {importResult && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              <p className="font-medium mb-1">Baris yang gagal diimport:</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                {importResult.map((e, i) => (
-                  <li key={i}>
-                    Baris {e.baris}: {e.pesan}
-                  </li>
-                ))}
-              </ul>
-              <button
-                onClick={() => setImportResult(null)}
-                className="mt-2 text-xs underline hover:no-underline"
-              >
-                Tutup
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mb-4">
@@ -401,8 +317,11 @@ export default function Barang() {
             <Input
               type="text"
               name="search"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value)
+                resetToFirstPage()
+              }}
               placeholder="Cari nama barang..."
             />
 
@@ -488,7 +407,7 @@ export default function Barang() {
                     <th className="px-6 py-3 font-medium">Status</th>
                     <th className="px-6 py-3 font-medium">Lokasi</th>
                     <th className="px-6 py-3 font-medium">Pengguna</th>
-                    {isAdmin() && <th className="px-6 py-3 font-medium text-right">Aksi</th>}
+                    <th className="px-6 py-3 font-medium text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -511,9 +430,9 @@ export default function Barang() {
                       </td>
                       <td className="px-6 py-3 text-slate-600">{b.lokasi || '-'}</td>
                       <td className="px-6 py-3 text-slate-600">{b.pengguna || '-'}</td>
-                      {isAdmin() && (
-                        <td className="px-6 py-3 text-right whitespace-nowrap">
-                          {view === 'trash' ? (
+                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                        {isAdmin() ? (
+                          view === 'trash' ? (
                             <>
                               <button
                                 onClick={() => setRestoreTarget(b)}
@@ -543,9 +462,11 @@ export default function Barang() {
                                 Hapus
                               </button>
                             </>
-                          )}
-                        </td>
-                      )}
+                          )
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -553,11 +474,11 @@ export default function Barang() {
             </div>
           )}
 
-          {!loading && total > 0 && (
+          {!loading && filtered.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100">
               <p className="text-sm text-slate-500">
-                Menampilkan {total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
-                {Math.min(page * PAGE_SIZE, total)} dari {total} data
+                Menampilkan {filtered.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1}–
+                {Math.min(page * PAGE_SIZE, filtered.length)} dari {filtered.length} data
               </p>
               <div className="flex items-center gap-2">
                 <button

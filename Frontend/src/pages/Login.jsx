@@ -32,51 +32,58 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-100 px-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8">
-        <h1 className="text-2xl font-bold text-slate-800 mb-1">Masuk</h1>
-        <p className="text-sm text-slate-500 mb-6">Silakan login ke akun Anda</p>
-
-        <div className="mb-4">
-          <Alert type="error" message={error} />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-100 via-blue-50 to-indigo-100 px-4">
+      <div className="w-full max-w-md animate-fade-up">
+        <div className="text-center mb-6">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-3xl shadow-lg shadow-blue-600/25">
+            📦
+          </div>
+          <h1 className="text-2xl font-bold text-slate-800">Selamat Datang</h1>
+          <p className="text-sm text-slate-500 mt-1">Sistem Inventaris Barang</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <Input
-            label="Nama"
-            type="text"
-            name="name"
-            value={form.name}
-            onChange={handleChange}
-            required
-            placeholder="Masukkan nama"
-          />
+        <div className="bg-white/80 backdrop-blur rounded-2xl shadow-xl shadow-slate-200/50 border border-white/60 p-8">
+          <div className="mb-4">
+            <Alert type="error" message={error} />
+          </div>
 
-          <Input
-            label="Password"
-            type="password"
-            name="password"
-            value={form.password}
-            onChange={handleChange}
-            required
-            placeholder="Masukkan password"
-          />
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <Input
+              label="Nama"
+              type="text"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              required
+              placeholder="Masukkan nama"
+            />
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-semibold py-2 transition"
-          >
-            {loading ? 'Memproses...' : 'Masuk'}
-          </button>
-        </form>
+            <Input
+              label="Password"
+              type="password"
+              name="password"
+              value={form.password}
+              onChange={handleChange}
+              required
+              placeholder="Masukkan password"
+            />
 
-        <p className="mt-6 text-center text-sm text-slate-500">
-          Belum punya akun?{' '}
-          <Link to="/register" className="text-blue-600 font-medium hover:underline">
-            Daftar sekarang
-          </Link>
-        </p>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:opacity-50 text-white font-semibold py-2.5 transition-all duration-200 shadow-lg shadow-blue-600/25 hover:shadow-blue-600/40 active:scale-[0.98]"
+            >
+              {loading ? 'Memproses...' : 'Masuk'}
+            </button>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-slate-500">
+            Belum punya akun?{' '}
+            <Link to="/register" className="text-blue-600 font-medium hover:underline">
+              Daftar sekarang
+            </Link>
+          </p>
+        </div>
       </div>
     </div>
   )

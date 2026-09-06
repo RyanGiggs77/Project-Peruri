@@ -36,15 +36,28 @@ CREATE TABLE IF NOT EXISTS assets (
   nama_barang TEXT NOT NULL,
   merk VARCHAR(50) REFERENCES brands(nama_merk) ON UPDATE CASCADE,
   tipe TEXT,
-  serial_number INTEGER UNIQUE,
+  serial_number INTEGER,
   tahun_pembelian INTEGER,
   status VARCHAR(20) NOT NULL DEFAULT 'aktif'
     CHECK (status IN ('aktif', 'dipinjam', 'maintenence', 'rusak', 'dihapus')),
   lokasi VARCHAR(100) REFERENCES locations(nama_lokasi) ON UPDATE CASCADE,
   pengguna TEXT,
   tanggal_input TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  keterangan TEXT
+  keterangan TEXT,
+  deleted_at TIMESTAMPTZ
 );
+
+-- Serial number unik hanya untuk barang yang tidak terhapus (soft delete)
+CREATE UNIQUE INDEX IF NOT EXISTS assets_serial_number_live_idx
+  ON assets (serial_number)
+  WHERE deleted_at IS NULL AND serial_number IS NOT NULL;
+
+-- Index performa
+CREATE INDEX IF NOT EXISTS idx_assets_deleted_at ON assets (deleted_at);
+CREATE INDEX IF NOT EXISTS idx_assets_status ON assets (status);
+CREATE INDEX IF NOT EXISTS idx_assets_tanggal_input ON assets (tanggal_input DESC);
+CREATE INDEX IF NOT EXISTS idx_assets_merk ON assets (merk) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_assets_lokasi ON assets (lokasi) WHERE deleted_at IS NULL;
 
 -- Sequence + trigger otomatis untuk kode_barang format IT-000001 (assets)
 CREATE SEQUENCE IF NOT EXISTS asset_kode_seq START 1;
@@ -75,3 +88,6 @@ CREATE TABLE IF NOT EXISTS asset_loans (
     CHECK (status IN ('pinjam', 'kembali')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE INDEX IF NOT EXISTS idx_asset_loans_kode_barang ON asset_loans (kode_barang);
+CREATE INDEX IF NOT EXISTS idx_asset_loans_status ON asset_loans (status);

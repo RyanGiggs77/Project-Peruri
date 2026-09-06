@@ -8,17 +8,15 @@ export default function Breadcrumb({ items }) {
           const isLast = i === items.length - 1
           return (
             <li key={i} className="flex items-center gap-2">
-              {i > 0 && (
-                <svg className="w-3.5 h-3.5 text-slate-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              )}
+              {i > 0 && <span className="text-slate-300">/</span>}
               {item.to && !isLast ? (
-                <Link to={item.to} className="text-blue-600 hover:text-blue-700 transition">
+                <Link to={item.to} className="text-blue-600 hover:underline">
                   {item.label}
                 </Link>
               ) : (
-                <span className={`font-medium ${isLast ? 'text-slate-800' : ''}`}>{item.label}</span>
+                <span className={`font-medium ${isLast ? 'text-slate-800' : ''}`}>
+                  {item.label}
+                </span>
               )}
             </li>
           )

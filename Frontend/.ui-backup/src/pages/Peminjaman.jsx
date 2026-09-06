@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -19,18 +19,11 @@ function formatDate(value) {
   return `${d}-${m}-${y}`
 }
 
-function today() {
-  const d = new Date()
-  const m = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
-  return `${d.getFullYear()}-${m}-${day}`
-}
-
 const emptyForm = {
   kode_barang: '',
   nama_peminjam: '',
   departement: '',
-  tanggal_pinjam: today(),
+  tanggal_pinjam: new Date().toISOString().slice(0, 10),
   tanggal_kembali: '',
 }
 
@@ -48,10 +41,6 @@ export default function Peminjaman() {
   const [deleting, setDeleting] = useState(false)
   const [returnTarget, setReturnTarget] = useState(null)
   const [returning, setReturning] = useState(false)
-  const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
-  const [importResult, setImportResult] = useState(null)
-  const fileInputRef = useRef(null)
 
   useEffect(() => {
     fetchAll()
@@ -152,14 +141,14 @@ export default function Peminjaman() {
     setSuccess('')
     setReturning(true)
 
-    const todayStr = today()
+    const today = new Date().toISOString().slice(0, 10)
     try {
       await api.put(`/peminjaman/${returnTarget.id}`, {
         kode_barang: returnTarget.kode_barang,
         nama_peminjam: returnTarget.nama_peminjam,
         departement: returnTarget.departement,
         tanggal_pinjam: returnTarget.tanggal_pinjam.slice(0, 10),
-        tanggal_kembali: todayStr,
+        tanggal_kembali: today,
         status: 'kembali',
       })
       setReturnTarget(null)
@@ -195,54 +184,6 @@ export default function Peminjaman() {
     ? barangList
     : barangList.filter((b) => b.status !== 'dipinjam')
 
-  async function handleExport() {
-    setError('')
-    setExporting(true)
-    try {
-      const res = await api.get('/peminjaman/export', { responseType: 'blob' })
-      const url = window.URL.createObjectURL(new Blob([res.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.download = `data-peminjaman-${new Date().toISOString().slice(0, 10)}.xlsx`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      window.URL.revokeObjectURL(url)
-      setSuccess('Data peminjaman berhasil diekspor')
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal mengekspor data peminjaman')
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  function handleFileChange(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setError('')
-    setSuccess('')
-    setImporting(true)
-    const formData = new FormData()
-    formData.append('file', file)
-
-    api
-      .post('/peminjaman/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchAll()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
-  }
-
   return (
     <Layout>
       <div className="max-w-7xl mx-auto">
@@ -250,59 +191,18 @@ export default function Peminjaman() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-lg font-semibold text-slate-800">Data Peminjaman</h2>
           {isAdmin() && (
-            <div className="flex items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
-                className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
-              >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
-              </button>
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="text-sm bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
-              >
-                {exporting ? 'Mengekspor...' : 'Export Excel'}
-              </button>
-              <button
-                onClick={openAdd}
-                className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
-              >
-                + Tambah Peminjaman
-              </button>
-            </div>
+            <button
+              onClick={openAdd}
+              className="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 transition"
+            >
+              + Tambah Peminjaman
+            </button>
           )}
         </div>
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
           <Alert type="error" message={error} />
-          {importResult && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-              <p className="font-medium mb-1">Baris yang gagal diimport:</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                {importResult.map((e, i) => (
-                  <li key={i}>
-                    Baris {e.baris}: {e.pesan}
-                  </li>
-                ))}
-              </ul>
-              <button
-                onClick={() => setImportResult(null)}
-                className="mt-2 text-xs underline hover:no-underline"
-              >
-                Tutup
-              </button>
-            </div>
-          )}
         </div>
 
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
@@ -322,7 +222,7 @@ export default function Peminjaman() {
                     <th className="px-6 py-3 font-medium">Tgl Pinjam</th>
                     <th className="px-6 py-3 font-medium">Tgl Kembali</th>
                     <th className="px-6 py-3 font-medium">Status</th>
-                    {isAdmin() && <th className="px-6 py-3 font-medium text-right">Aksi</th>}
+                    <th className="px-6 py-3 font-medium text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -342,8 +242,8 @@ export default function Peminjaman() {
                           {p.status === 'pinjam' ? 'Pinjam' : 'Dikembalikan'}
                         </span>
                       </td>
-                      {isAdmin() && (
-                        <td className="px-6 py-3 text-right whitespace-nowrap">
+                      <td className="px-6 py-3 text-right whitespace-nowrap">
+                        {isAdmin() ? (
                           <>
                             <button
                               onClick={() => openEdit(p)}
@@ -366,8 +266,10 @@ export default function Peminjaman() {
                               Hapus
                             </button>
                           </>
-                        </td>
-                      )}
+                        ) : (
+                          <span className="text-slate-300">-</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
