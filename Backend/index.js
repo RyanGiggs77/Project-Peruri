@@ -53,6 +53,12 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: 'Terjadi kesalahan pada server' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server berjalan di http://localhost:${PORT}`);
-});
+// Saat dijalankan langsung (lokal): jalankan server.
+// Saat di-import oleh api/index.js (Vercel serverless): hanya export app.
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server berjalan di http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
