@@ -239,10 +239,10 @@ export default function Peminjaman() {
     <Layout>
       <div className="max-w-7xl mx-auto">
         <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Peminjaman' }]} />
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h2 className="text-lg font-semibold text-slate-800">Data Peminjaman</h2>
           {isAdmin() && (
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
