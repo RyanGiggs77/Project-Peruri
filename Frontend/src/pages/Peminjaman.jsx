@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -35,55 +36,124 @@ const emptyForm = {
 }
 
 export default function Peminjaman() {
-  const [list, setList] = useState([])
-  const [barangList, setBarangList] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
   const [returnTarget, setReturnTarget] = useState(null)
-  const [returning, setReturning] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const fileInputRef = useRef(null)
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  const {
+    data: list = [],
+    isPending: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['peminjaman'],
+    queryFn: async () => (await api.get('/peminjaman')).data.peminjaman,
+  })
 
-  async function fetchAll() {
-    try {
-      const [peminjamanRes, barangRes] = await Promise.all([
-        api.get('/peminjaman'),
-        api.get('/barang'),
-      ])
-      setList(peminjamanRes.data.peminjaman)
-      setBarangList(barangRes.data.barang)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data peminjaman')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Daftar barang untuk dropdown form; cache dibagi dengan halaman Barang
+  const { data: barangList = [] } = useQuery({
+    queryKey: ['barang', { view: 'aktif', page: 1 }],
+    queryFn: async () => {
+      const res = await api.get('/barang', { params: { page: 1, limit: 100 } })
+      return res.data.barang
+    },
+    staleTime: 30 * 1000,
+  })
 
-  async function fetchList() {
-    try {
-      const [peminjamanRes, barangRes] = await Promise.all([
-        api.get('/peminjaman'),
-        api.get('/barang'),
-      ])
-      setList(peminjamanRes.data.peminjaman)
-      setBarangList(barangRes.data.barang)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data peminjaman')
-    }
-  }
+  const invalidatePeminjaman = () =>
+    queryClient.invalidateQueries({ queryKey: ['peminjaman'] })
+
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (editing) {
+        const payload = {
+          kode_barang: form.kode_barang,
+          nama_peminjam: form.nama_peminjam,
+          departement: form.departement,
+          tanggal_pinjam: form.tanggal_pinjam,
+          status: editing.status === 'kembali' ? 'kembali' : 'pinjam',
+          tanggal_kembali:
+            editing.status === 'kembali' ? form.tanggal_kembali : null,
+        }
+        await api.put(`/peminjaman/${editing.id}`, payload)
+      } else {
+        await api.post('/peminjaman', {
+          kode_barang: form.kode_barang,
+          nama_peminjam: form.nama_peminjam,
+          departement: form.departement,
+          tanggal_pinjam: form.tanggal_pinjam,
+        })
+      }
+    },
+    onSuccess: () => {
+      setModalOpen(false)
+      setSuccess(editing ? 'Peminjaman berhasil diperbarui' : 'Peminjaman berhasil ditambahkan')
+      invalidatePeminjaman()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal menyimpan data peminjaman')
+    },
+  })
+
+  const returnMutation = useMutation({
+    mutationFn: (target) =>
+      api.put(`/peminjaman/${target.id}`, {
+        kode_barang: target.kode_barang,
+        nama_peminjam: target.nama_peminjam,
+        departement: target.departement,
+        tanggal_pinjam: target.tanggal_pinjam.slice(0, 10),
+        tanggal_kembali: today(),
+        status: 'kembali',
+      }),
+    onSuccess: () => {
+      setReturnTarget(null)
+      setSuccess('Barang berhasil dikembalikan')
+      invalidatePeminjaman()
+    },
+    onError: (err) => {
+      setReturnTarget(null)
+      setError(err.response?.data?.message || 'Gagal mengembalikan barang')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => api.delete(`/peminjaman/${id}`),
+    onSuccess: () => {
+      setDeleteTarget(null)
+      setSuccess('Peminjaman berhasil dihapus')
+      invalidatePeminjaman()
+    },
+    onError: (err) => {
+      setDeleteTarget(null)
+      setError(err.response?.data?.message || 'Gagal menghapus peminjaman')
+    },
+  })
+
+  const importMutation = useMutation({
+    mutationFn: (formData) =>
+      api.post('/peminjaman/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: (res) => {
+      setSuccess(res.data.message)
+      setImportResult(res.data.errors?.length ? res.data.errors : null)
+      invalidatePeminjaman()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal mengimpor file')
+    },
+  })
+
+  const loadError = queryError
+    ? queryError.response?.data?.message || 'Gagal memuat data peminjaman'
+    : ''
 
   function openAdd() {
     setEditing(null)
@@ -109,86 +179,24 @@ export default function Peminjaman() {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setSubmitting(true)
-
-    try {
-      if (editing) {
-        const payload = {
-          kode_barang: form.kode_barang,
-          nama_peminjam: form.nama_peminjam,
-          departement: form.departement,
-          tanggal_pinjam: form.tanggal_pinjam,
-          status: editing.status === 'kembali' ? 'kembali' : 'pinjam',
-          tanggal_kembali:
-            editing.status === 'kembali' ? form.tanggal_kembali : null,
-        }
-        await api.put(`/peminjaman/${editing.id}`, payload)
-        setSuccess('Peminjaman berhasil diperbarui')
-      } else {
-        await api.post('/peminjaman', {
-          kode_barang: form.kode_barang,
-          nama_peminjam: form.nama_peminjam,
-          departement: form.departement,
-          tanggal_pinjam: form.tanggal_pinjam,
-        })
-        setSuccess('Peminjaman berhasil ditambahkan')
-      }
-      setModalOpen(false)
-      await fetchList()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal menyimpan data peminjaman')
-    } finally {
-      setSubmitting(false)
-    }
+    saveMutation.mutate()
   }
 
-  async function handleReturn() {
+  function handleReturn() {
     if (!returnTarget) return
     setError('')
     setSuccess('')
-    setReturning(true)
-
-    const todayStr = today()
-    try {
-      await api.put(`/peminjaman/${returnTarget.id}`, {
-        kode_barang: returnTarget.kode_barang,
-        nama_peminjam: returnTarget.nama_peminjam,
-        departement: returnTarget.departement,
-        tanggal_pinjam: returnTarget.tanggal_pinjam.slice(0, 10),
-        tanggal_kembali: todayStr,
-        status: 'kembali',
-      })
-      setReturnTarget(null)
-      setSuccess('Barang berhasil dikembalikan')
-      await fetchList()
-    } catch (err) {
-      setReturnTarget(null)
-      setError(err.response?.data?.message || 'Gagal mengembalikan barang')
-    } finally {
-      setReturning(false)
-    }
+    returnMutation.mutate(returnTarget)
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.delete(`/peminjaman/${deleteTarget.id}`)
-      setDeleteTarget(null)
-      setSuccess('Peminjaman berhasil dihapus')
-      await fetchList()
-    } catch (err) {
-      setDeleteTarget(null)
-      setError(err.response?.data?.message || 'Gagal menghapus peminjaman')
-    } finally {
-      setDeleting(false)
-    }
+    deleteMutation.mutate(deleteTarget.id)
   }
 
   const barangOptions = editing
@@ -221,26 +229,10 @@ export default function Peminjaman() {
     if (!file) return
     setError('')
     setSuccess('')
-    setImporting(true)
     const formData = new FormData()
     formData.append('file', file)
-
-    api
-      .post('/peminjaman/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchAll()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
+    importMutation.mutate(formData)
+    e.target.value = ''
   }
 
   return (
@@ -260,10 +252,10 @@ export default function Peminjaman() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
+                disabled={importMutation.isPending}
                 className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
               >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
+                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
               </button>
               <button
                 onClick={handleExport}
@@ -284,7 +276,7 @@ export default function Peminjaman() {
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
-          <Alert type="error" message={error} />
+          <Alert type="error" message={error || loadError} />
           {importResult && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               <p className="font-medium mb-1">Baris yang gagal diimport:</p>
@@ -308,7 +300,7 @@ export default function Peminjaman() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           {loading ? (
             <p className="p-6 text-sm text-slate-500">Memuat data...</p>
-          ) : list.length === 0 ? (
+          ) : list.length === 0 && !loadError ? (
             <p className="p-6 text-sm text-slate-500">Belum ada data peminjaman.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -460,10 +452,10 @@ export default function Peminjaman() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={saveMutation.isPending}
                 className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan'}
+                {saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
           </form>
@@ -477,7 +469,7 @@ export default function Peminjaman() {
           } - ${deleteTarget?.nama_peminjam}"?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        loading={deleting}
+        loading={deleteMutation.isPending}
       />
 
       <ConfirmDialog
@@ -487,7 +479,7 @@ export default function Peminjaman() {
           }"? Status barang akan otomatis menjadi aktif.`}
         onConfirm={handleReturn}
         onCancel={() => setReturnTarget(null)}
-        loading={returning}
+        loading={returnMutation.isPending}
         confirmLabel="Kembalikan"
       />
     </Layout>

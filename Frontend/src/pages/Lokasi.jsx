@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -11,35 +12,80 @@ import { isAdmin } from '../auth'
 const emptyForm = { nama_lokasi: '', department: '' }
 
 export default function Lokasi() {
-  const [lokasiList, setLokasiList] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const fileInputRef = useRef(null)
 
-  useEffect(() => {
-    fetchLokasi()
-  }, [])
-
-  async function fetchLokasi() {
-    try {
+  const {
+    data: lokasiList = [],
+    isPending: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['lokasi'],
+    queryFn: async () => {
       const res = await api.get('/lokasi')
-      setLokasiList(res.data.lokasi)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data lokasi')
-    } finally {
-      setLoading(false)
-    }
-  }
+      return res.data.lokasi
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (editing) {
+        await api.put(`/lokasi/${encodeURIComponent(editing.nama_lokasi)}`, payload)
+      } else {
+        await api.post('/lokasi', payload)
+      }
+    },
+    onSuccess: () => {
+      setModalOpen(false)
+      setSuccess(editing ? 'Lokasi berhasil diperbarui' : 'Lokasi berhasil ditambahkan')
+      queryClient.invalidateQueries({ queryKey: ['lokasi'] })
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal menyimpan data lokasi')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (namaLokasi) =>
+      api.delete(`/lokasi/${encodeURIComponent(namaLokasi)}`),
+    onSuccess: () => {
+      setDeleteTarget(null)
+      setSuccess('Lokasi berhasil dihapus')
+      queryClient.invalidateQueries({ queryKey: ['lokasi'] })
+    },
+    onError: (err) => {
+      setDeleteTarget(null)
+      setError(err.response?.data?.message || 'Gagal menghapus lokasi')
+    },
+  })
+
+  const importMutation = useMutation({
+    mutationFn: (formData) =>
+      api.post('/lokasi/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: (res) => {
+      setSuccess(res.data.message)
+      setImportResult(res.data.errors?.length ? res.data.errors : null)
+      queryClient.invalidateQueries({ queryKey: ['lokasi'] })
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal mengimpor file')
+    },
+  })
+
+  const loadError = queryError
+    ? queryError.response?.data?.message || 'Gagal memuat data lokasi'
+    : ''
 
   function openAdd() {
     setEditing(null)
@@ -59,45 +105,17 @@ export default function Lokasi() {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setSubmitting(true)
-
-    try {
-      if (editing) {
-        await api.put(`/lokasi/${encodeURIComponent(editing.nama_lokasi)}`, form)
-        setSuccess('Lokasi berhasil diperbarui')
-      } else {
-        await api.post('/lokasi', form)
-        setSuccess('Lokasi berhasil ditambahkan')
-      }
-      setModalOpen(false)
-      await fetchLokasi()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal menyimpan data lokasi')
-    } finally {
-      setSubmitting(false)
-    }
+    saveMutation.mutate(form)
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.delete(`/lokasi/${encodeURIComponent(deleteTarget.nama_lokasi)}`)
-      setDeleteTarget(null)
-      setSuccess('Lokasi berhasil dihapus')
-      await fetchLokasi()
-    } catch (err) {
-      setDeleteTarget(null)
-      setError(err.response?.data?.message || 'Gagal menghapus lokasi')
-    } finally {
-      setDeleting(false)
-    }
+    deleteMutation.mutate(deleteTarget.nama_lokasi)
   }
 
   async function handleExport() {
@@ -126,26 +144,10 @@ export default function Lokasi() {
     if (!file) return
     setError('')
     setSuccess('')
-    setImporting(true)
     const formData = new FormData()
     formData.append('file', file)
-
-    api
-      .post('/lokasi/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchLokasi()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
+    importMutation.mutate(formData)
+    e.target.value = ''
   }
 
   return (
@@ -165,10 +167,10 @@ export default function Lokasi() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
+                disabled={importMutation.isPending}
                 className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
               >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
+                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
               </button>
               <button
                 onClick={handleExport}
@@ -189,7 +191,7 @@ export default function Lokasi() {
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
-          <Alert type="error" message={error} />
+          <Alert type="error" message={error || loadError} />
           {importResult && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               <p className="font-medium mb-1">Baris yang gagal diimport:</p>
@@ -290,10 +292,10 @@ export default function Lokasi() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={saveMutation.isPending}
                 className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan'}
+                {saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
           </form>
@@ -306,7 +308,7 @@ export default function Lokasi() {
         message={`Yakin ingin menghapus lokasi "${deleteTarget?.nama_lokasi}"?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        loading={deleting}
+        loading={deleteMutation.isPending}
       />
     </Layout>
   )

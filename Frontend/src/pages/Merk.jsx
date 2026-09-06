@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -11,35 +12,80 @@ import { isAdmin } from '../auth'
 const emptyForm = { nama_merk: '', keterangan: '' }
 
 export default function Merk() {
-  const [merkList, setMerkList] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const fileInputRef = useRef(null)
 
-  useEffect(() => {
-    fetchMerk()
-  }, [])
-
-  async function fetchMerk() {
-    try {
+  const {
+    data: merkList = [],
+    isPending: loading,
+    error: queryError,
+  } = useQuery({
+    queryKey: ['merk'],
+    queryFn: async () => {
       const res = await api.get('/merk')
-      setMerkList(res.data.merk)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data merk')
-    } finally {
-      setLoading(false)
-    }
-  }
+      return res.data.merk
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (editing) {
+        await api.put(`/merk/${encodeURIComponent(editing.nama_merk)}`, payload)
+      } else {
+        await api.post('/merk', payload)
+      }
+    },
+    onSuccess: () => {
+      setModalOpen(false)
+      setSuccess(editing ? 'Merk berhasil diperbarui' : 'Merk berhasil ditambahkan')
+      queryClient.invalidateQueries({ queryKey: ['merk'] })
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal menyimpan data merk')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (namaMerk) =>
+      api.delete(`/merk/${encodeURIComponent(namaMerk)}`),
+    onSuccess: () => {
+      setDeleteTarget(null)
+      setSuccess('Merk berhasil dihapus')
+      queryClient.invalidateQueries({ queryKey: ['merk'] })
+    },
+    onError: (err) => {
+      setDeleteTarget(null)
+      setError(err.response?.data?.message || 'Gagal menghapus merk')
+    },
+  })
+
+  const importMutation = useMutation({
+    mutationFn: (formData) =>
+      api.post('/merk/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: (res) => {
+      setSuccess(res.data.message)
+      setImportResult(res.data.errors?.length ? res.data.errors : null)
+      queryClient.invalidateQueries({ queryKey: ['merk'] })
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal mengimpor file')
+    },
+  })
+
+  const loadError = queryError
+    ? queryError.response?.data?.message || 'Gagal memuat data merk'
+    : ''
 
   function openAdd() {
     setEditing(null)
@@ -59,45 +105,17 @@ export default function Merk() {
     setForm({ ...form, [e.target.name]: e.target.value })
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setSubmitting(true)
-
-    try {
-      if (editing) {
-        await api.put(`/merk/${encodeURIComponent(editing.nama_merk)}`, form)
-        setSuccess('Merk berhasil diperbarui')
-      } else {
-        await api.post('/merk', form)
-        setSuccess('Merk berhasil ditambahkan')
-      }
-      setModalOpen(false)
-      await fetchMerk()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal menyimpan data merk')
-    } finally {
-      setSubmitting(false)
-    }
+    saveMutation.mutate(form)
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.delete(`/merk/${encodeURIComponent(deleteTarget.nama_merk)}`)
-      setDeleteTarget(null)
-      setSuccess('Merk berhasil dihapus')
-      await fetchMerk()
-    } catch (err) {
-      setDeleteTarget(null)
-      setError(err.response?.data?.message || 'Gagal menghapus merk')
-    } finally {
-      setDeleting(false)
-    }
+    deleteMutation.mutate(deleteTarget.nama_merk)
   }
 
   async function handleExport() {
@@ -126,26 +144,10 @@ export default function Merk() {
     if (!file) return
     setError('')
     setSuccess('')
-    setImporting(true)
     const formData = new FormData()
     formData.append('file', file)
-
-    api
-      .post('/merk/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchMerk()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
+    importMutation.mutate(formData)
+    e.target.value = ''
   }
 
   return (
@@ -165,10 +167,10 @@ export default function Merk() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
+                disabled={importMutation.isPending}
                 className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
               >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
+                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
               </button>
               <button
                 onClick={handleExport}
@@ -189,7 +191,7 @@ export default function Merk() {
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
-          <Alert type="error" message={error} />
+          <Alert type="error" message={error || loadError} />
           {importResult && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               <p className="font-medium mb-1">Baris yang gagal diimport:</p>
@@ -290,10 +292,10 @@ export default function Merk() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={saveMutation.isPending}
                 className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan'}
+                {saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
           </form>
@@ -306,7 +308,7 @@ export default function Merk() {
         message={`Yakin ingin menghapus merk "${deleteTarget?.nama_merk}"?`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        loading={deleting}
+        loading={deleteMutation.isPending}
       />
     </Layout>
   )

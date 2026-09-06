@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/axios'
 import Layout from '../components/Layout'
 import Modal from '../components/Modal'
@@ -34,23 +35,17 @@ const emptyForm = {
 }
 
 export default function Barang() {
-  const [barangList, setBarangList] = useState([])
-  const [merkList, setMerkList] = useState([])
-  const [lokasiList, setLokasiList] = useState([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(emptyForm)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [submitting, setSubmitting] = useState(false)
   const [view, setView] = useState('aktif')
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [restoreTarget, setRestoreTarget] = useState(null)
   const [permanentTarget, setPermanentTarget] = useState(null)
-  const [deleting, setDeleting] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [importing, setImporting] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const fileInputRef = useRef(null)
 
@@ -61,29 +56,23 @@ export default function Barang() {
   const [filterLokasi, setFilterLokasi] = useState('')
   const [sortTahun, setSortTahun] = useState('')
   const [page, setPage] = useState(1)
-  const [total, setTotal] = useState(0)
 
-  useEffect(() => {
-    fetchAll()
-  }, [])
+  // Master data (cache dibagi dengan halaman Merk & Lokasi, staleTime panjang)
+  const { data: merkList = [] } = useQuery({
+    queryKey: ['merk'],
+    queryFn: async () => (await api.get('/merk')).data.merk,
+    staleTime: 5 * 60 * 1000,
+  })
+  const { data: lokasiList = [] } = useQuery({
+    queryKey: ['lokasi'],
+    queryFn: async () => (await api.get('/lokasi')).data.lokasi,
+    staleTime: 5 * 60 * 1000,
+  })
 
-  async function fetchAll() {
-    try {
-      const [merkRes, lokasiRes] = await Promise.all([
-        api.get('/merk'),
-        api.get('/lokasi'),
-      ])
-      setMerkList(merkRes.data.merk)
-      setLokasiList(lokasiRes.data.lokasi)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data barang')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const fetchBarang = useCallback(async () => {
-    try {
+  // List barang: queryKey mengikuti semua filter aktif
+  const barangQuery = useQuery({
+    queryKey: ['barang', { view, search, filterStatus, filterMerk, filterLokasi, sortTahun, page }],
+    queryFn: async () => {
       const endpoint = view === 'trash' ? '/barang/trash' : '/barang'
       const params = {}
       if (search) params.search = search
@@ -93,18 +82,17 @@ export default function Barang() {
       if (sortTahun) params.sort = sortTahun
       params.page = page
       params.limit = PAGE_SIZE
-
       const res = await api.get(endpoint, { params })
-      setBarangList(res.data.barang)
-      setTotal(res.data.total)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal memuat data barang')
-    }
-  }, [view, search, filterStatus, filterMerk, filterLokasi, sortTahun, page])
-
-  useEffect(() => {
-    fetchBarang()
-  }, [fetchBarang])
+      return res.data
+    },
+    placeholderData: keepPreviousData,
+  })
+  const barangList = barangQuery.data?.barang ?? []
+  const total = barangQuery.data?.total ?? 0
+  const loading = barangQuery.isPending
+  const loadError = barangQuery.error
+    ? barangQuery.error.response?.data?.message || 'Gagal memuat data barang'
+    : ''
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -113,6 +101,80 @@ export default function Barang() {
     }, 400)
     return () => clearTimeout(t)
   }, [searchInput])
+
+  const invalidateBarang = () => queryClient.invalidateQueries({ queryKey: ['barang'] })
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (editing) {
+        await api.put(`/barang/${encodeURIComponent(editing.kode_barang)}`, payload)
+      } else {
+        await api.post('/barang', payload)
+      }
+    },
+    onSuccess: () => {
+      setModalOpen(false)
+      setSuccess(editing ? 'Barang berhasil diperbarui' : 'Barang berhasil ditambahkan')
+      invalidateBarang()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal menyimpan data barang')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (kode) => api.delete(`/barang/${encodeURIComponent(kode)}`),
+    onSuccess: () => {
+      setDeleteTarget(null)
+      setSuccess('Barang berhasil dihapus (masuk trash)')
+      invalidateBarang()
+    },
+    onError: (err) => {
+      setDeleteTarget(null)
+      setError(err.response?.data?.message || 'Gagal menghapus barang')
+    },
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: (kode) => api.post(`/barang/${encodeURIComponent(kode)}/restore`),
+    onSuccess: () => {
+      setRestoreTarget(null)
+      setSuccess('Barang berhasil dipulihkan')
+      invalidateBarang()
+    },
+    onError: (err) => {
+      setRestoreTarget(null)
+      setError(err.response?.data?.message || 'Gagal memulihkan barang')
+    },
+  })
+
+  const permanentMutation = useMutation({
+    mutationFn: (kode) => api.delete(`/barang/${encodeURIComponent(kode)}/permanent`),
+    onSuccess: () => {
+      setPermanentTarget(null)
+      setSuccess('Barang berhasil dihapus permanen')
+      invalidateBarang()
+    },
+    onError: (err) => {
+      setPermanentTarget(null)
+      setError(err.response?.data?.message || 'Gagal menghapus barang permanen')
+    },
+  })
+
+  const importMutation = useMutation({
+    mutationFn: (formData) =>
+      api.post('/barang/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      }),
+    onSuccess: (res) => {
+      setSuccess(res.data.message)
+      setImportResult(res.data.errors?.length ? res.data.errors : null)
+      invalidateBarang()
+    },
+    onError: (err) => {
+      setError(err.response?.data?.message || 'Gagal mengimpor file')
+    },
+  })
 
   async function switchView(next) {
     setView(next)
@@ -165,15 +227,13 @@ export default function Barang() {
     }
   }
 
-  async function handleSubmit(e) {
+  function handleSubmit(e) {
     e.preventDefault()
     setError('')
     setSuccess('')
-    setSubmitting(true)
 
     if (form.nama_barang.trim().length < 3) {
       setError('Nama barang minimal 3 karakter')
-      setSubmitting(false)
       return
     }
 
@@ -182,44 +242,16 @@ export default function Barang() {
       Number(form.tahun_pembelian) > CURRENT_YEAR
     ) {
       setError('Tahun pembelian tidak boleh melebihi tahun sekarang')
-      setSubmitting(false)
       return
     }
 
-    try {
-      const payload = buildPayload()
-      if (editing) {
-        await api.put(`/barang/${encodeURIComponent(editing.kode_barang)}`, payload)
-        setSuccess('Barang berhasil diperbarui')
-      } else {
-        await api.post('/barang', payload)
-        setSuccess('Barang berhasil ditambahkan')
-      }
-      setModalOpen(false)
-      await fetchBarang()
-    } catch (err) {
-      setError(err.response?.data?.message || 'Gagal menyimpan data barang')
-    } finally {
-      setSubmitting(false)
-    }
+    saveMutation.mutate(buildPayload())
   }
 
-  async function handleDelete() {
+  function handleDelete() {
     if (!deleteTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.delete(`/barang/${encodeURIComponent(deleteTarget.kode_barang)}`)
-      setDeleteTarget(null)
-      setSuccess('Barang berhasil dihapus (masuk trash)')
-      await fetchBarang()
-    } catch (err) {
-      setDeleteTarget(null)
-      setError(err.response?.data?.message || 'Gagal menghapus barang')
-    } finally {
-      setDeleting(false)
-    }
+    deleteMutation.mutate(deleteTarget.kode_barang)
   }
 
   async function handleExport() {
@@ -248,64 +280,22 @@ export default function Barang() {
     if (!file) return
     setError('')
     setSuccess('')
-    setImporting(true)
     const formData = new FormData()
     formData.append('file', file)
-
-    api
-      .post('/barang/import', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      })
-      .then((res) => {
-        setSuccess(res.data.message)
-        setImportResult(res.data.errors?.length ? res.data.errors : null)
-        fetchBarang()
-      })
-      .catch((err) => {
-        setError(err.response?.data?.message || 'Gagal mengimpor file')
-      })
-      .finally(() => {
-        setImporting(false)
-        e.target.value = ''
-      })
+    importMutation.mutate(formData)
+    e.target.value = ''
   }
 
-  async function handleRestore() {
+  function handleRestore() {
     if (!restoreTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.post(`/barang/${encodeURIComponent(restoreTarget.kode_barang)}/restore`)
-      setRestoreTarget(null)
-      setSuccess('Barang berhasil dipulihkan')
-      await fetchBarang()
-    } catch (err) {
-      setRestoreTarget(null)
-      setError(err.response?.data?.message || 'Gagal memulihkan barang')
-    } finally {
-      setDeleting(false)
-    }
+    restoreMutation.mutate(restoreTarget.kode_barang)
   }
 
-  async function handlePermanent() {
+  function handlePermanent() {
     if (!permanentTarget) return
     setError('')
-    setDeleting(true)
-
-    try {
-      await api.delete(
-        `/barang/${encodeURIComponent(permanentTarget.kode_barang)}/permanent`
-      )
-      setPermanentTarget(null)
-      setSuccess('Barang berhasil dihapus permanen')
-      await fetchBarang()
-    } catch (err) {
-      setPermanentTarget(null)
-      setError(err.response?.data?.message || 'Gagal menghapus barang permanen')
-    } finally {
-      setDeleting(false)
-    }
+    permanentMutation.mutate(permanentTarget.kode_barang)
   }
 
   return (
@@ -351,10 +341,10 @@ export default function Barang() {
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={importing}
+                disabled={importMutation.isPending}
                 className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
               >
-                {importing ? 'Mengimpor...' : 'Import Excel'}
+                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
               </button>
               <button
                 onClick={handleExport}
@@ -375,7 +365,7 @@ export default function Barang() {
 
         <div className="mb-4 space-y-3">
           <Alert type="success" message={success} />
-          <Alert type="error" message={error} />
+          <Alert type="error" message={error || loadError} />
           {importResult && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
               <p className="font-medium mb-1">Baris yang gagal diimport:</p>
@@ -472,7 +462,7 @@ export default function Barang() {
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           {loading ? (
             <p className="p-6 text-sm text-slate-500">Memuat data...</p>
-          ) : pageItems.length === 0 ? (
+          ) : pageItems.length === 0 && !loadError ? (
             <p className="p-6 text-sm text-slate-500">Tidak ada data barang yang cocok.</p>
           ) : (
             <div className="overflow-x-auto">
@@ -518,12 +508,14 @@ export default function Barang() {
                               <button
                                 onClick={() => setRestoreTarget(b)}
                                 className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg px-3 py-1.5 mr-2 transition"
+                                disabled={restoreMutation.isPending}
                               >
                                 Restore
                               </button>
                               <button
                                 onClick={() => setPermanentTarget(b)}
                                 className="text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg px-3 py-1.5 transition"
+                                disabled={permanentMutation.isPending}
                               >
                                 Hapus Permanen
                               </button>
@@ -716,10 +708,10 @@ export default function Barang() {
               </button>
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={saveMutation.isPending}
                 className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 transition"
               >
-                {submitting ? 'Menyimpan...' : 'Simpan'}
+                {saveMutation.isPending ? 'Menyimpan...' : 'Simpan'}
               </button>
             </div>
           </form>
@@ -732,7 +724,7 @@ export default function Barang() {
         message={`Yakin ingin menghapus barang "${deleteTarget?.kode_barang} - ${deleteTarget?.nama_barang}"? Barang akan dipindahkan ke trash dan bisa dipulihkan.`}
         onConfirm={handleDelete}
         onCancel={() => setDeleteTarget(null)}
-        loading={deleting}
+        loading={deleteMutation.isPending}
       />
 
       <ConfirmDialog
@@ -743,7 +735,7 @@ export default function Barang() {
         tone="emerald"
         onConfirm={handleRestore}
         onCancel={() => setRestoreTarget(null)}
-        loading={deleting}
+        loading={restoreMutation.isPending}
       />
 
       <ConfirmDialog
@@ -753,7 +745,7 @@ export default function Barang() {
         confirmLabel="Hapus Permanen"
         onConfirm={handlePermanent}
         onCancel={() => setPermanentTarget(null)}
-        loading={deleting}
+        loading={permanentMutation.isPending}
       />
     </Layout>
   )

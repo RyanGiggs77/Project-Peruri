@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import {
   ResponsiveContainer,
   BarChart,
@@ -35,17 +35,14 @@ const STATUS_LABELS = {
 }
 
 export default function Dashboard() {
-  const [data, setData] = useState(null)
-  const [error, setError] = useState('')
+  const { data, isPending: loading, error: queryError } = useQuery({
+    queryKey: ['dashboard'],
+    queryFn: async () => (await api.get('/dashboard/stats')).data,
+  })
 
-  useEffect(() => {
-    api
-      .get('/dashboard/stats')
-      .then((res) => setData(res.data))
-      .catch((err) =>
-        setError(err.response?.data?.message || 'Gagal memuat statistik')
-      )
-  }, [])
+  const error = queryError
+    ? queryError.response?.data?.message || 'Gagal memuat statistik'
+    : ''
 
   const statCards = data
     ? [
@@ -107,14 +104,14 @@ export default function Dashboard() {
 
         <section>
           <h2 className="text-lg font-semibold text-slate-800 mb-4">Ringkasan Barang</h2>
-          {data ? (
+          {loading ? (
+            <p className="text-sm text-slate-500">Memuat statistik...</p>
+          ) : !error && (
             <div className="grid grid-cols-6 gap-4">
               {statCards.map((s) => (
                 <StatCard key={s.label} label={s.label} value={s.value} color={s.color} icon={s.icon} />
               ))}
             </div>
-          ) : (
-            <p className="text-sm text-slate-500">Memuat statistik...</p>
           )}
         </section>
 
