@@ -156,25 +156,25 @@ export default function Merk() {
         <Breadcrumb items={[{ label: 'Dashboard', to: '/' }, { label: 'Merk' }]} />
         <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
           <h2 className="text-lg font-semibold text-slate-800">Master Merk</h2>
-          {isAdmin() && (
-            <div className="flex flex-wrap items-center gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={importMutation.isPending}
-                className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
-              >
-                {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
-              </button>
-            </div>
-          )}
           <div className="flex flex-wrap items-center gap-2">
+            {isAdmin() && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx"
+                  onChange={handleFileChange}
+                  className="hidden"
+                />
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={importMutation.isPending}
+                  className="text-sm bg-slate-200 hover:bg-slate-300 disabled:opacity-50 text-slate-700 rounded-lg px-4 py-2 transition"
+                >
+                  {importMutation.isPending ? 'Mengimpor...' : 'Import Excel'}
+                </button>
+              </>
+            )}
             <button
               onClick={handleExport}
               disabled={exporting}
